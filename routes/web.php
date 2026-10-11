@@ -1,48 +1,40 @@
 <?php
 
-use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
+Route::get('/mahasiswa/{nim?}', function (?string $nim = null) {
+    try {
+        $pdo = DB::connection()->getPdo();
+
+        $sql = 'SELECT m.nim, m.nama, m.email,
+                       p.nama_program_studi AS nama_prodi
+                FROM mahasiswa AS m
+                JOIN program_studi AS p
+                    ON p.id = m.program_studi_id';
+
+        if ($nim !== null) {
+            $sql .= ' WHERE m.nim = :nim';
+        }
+
+        $sql .= ' ORDER BY m.nim';
+
+        $statement = $pdo->prepare($sql);
+
+        $statement->execute(
+            $nim !== null ? ['nim' => $nim] : []
+        );
+
+        $daftarMahasiswa = $statement->fetchAll(\PDO::FETCH_ASSOC);
+
+        return view('mahasiswa', compact('daftarMahasiswa', 'nim'));
+
+    } catch (\Throwable $error) {
+        report($error);
+
+        return response(
+            'Koneksi atau query basis data gagal. Periksa file .env dan layanan MySQL.',
+            500
+        );
+    }
 });
-
-Route::get('/form-mahasiswa', function () {
-    return view('form-mahasiswa');
-})->name('form.mahasiswa');
-
-Route::post('/form-mahasiswa', function (Request $request) {
-
-    $request->merge([
-        'nama' => strip_tags(trim($request->nama ?? '')),
-        'email' => trim($request->email ?? ''),
-        'usia' => trim($request->usia ?? ''),
-        'nim' => trim($request->nim ?? ''),
-    ]);
-
-    $validated = $request->validate([
-        'nama' => ['required', 'string', 'max:100'],
-        'email' => ['required', 'email', 'max:100'],
-        'usia' => ['required', 'integer', 'min:1', 'max:100'],
-        'nim' => ['required', 'regex:/^[0-9]{8,12}$/'],
-    ], [
-        'nama.required' => 'Nama wajib diisi.',
-        'nama.max' => 'Nama maksimal 100 karakter.',
-
-        'email.required' => 'Email wajib diisi.',
-        'email.email' => 'Format email tidak valid.',
-        'email.max' => 'Email maksimal 100 karakter.',
-
-        'usia.required' => 'Usia wajib diisi.',
-        'usia.integer' => 'Usia harus berupa angka.',
-        'usia.min' => 'Usia minimal 1 tahun.',
-        'usia.max' => 'Usia maksimal 100 tahun.',
-
-        'nim.required' => 'NIM wajib diisi.',
-        'nim.regex' => 'NIM harus terdiri dari 8–12 digit angka.',
-    ]);
-
-    return view('hasil-form', [
-        'data' => $validated
-    ]);
-})->name('form.proses');
